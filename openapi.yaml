@@ -1,0 +1,312 @@
+openapi: 3.1.0
+info:
+  title: api-pedidos
+  description: Contrato do serviço de Pedidos — RangoJá
+  version: "1.0.0"
+servers:
+  - url: http://localhost:8000
+    description: Ambiente local
+
+tags:
+  - name: Sistema
+  - name: Pedidos
+
+paths:
+  /health:
+    get:
+      summary: Verifica se o serviço está no ar
+      operationId: verificarSaude
+      tags: [Sistema]
+      responses:
+        "200":
+          description: Serviço operante
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Health'
+        "503":
+          $ref: '#/components/responses/Indisponivel'
+
+  /pedidos:
+    get:
+      summary: Lista pedidos de forma paginada
+      operationId: listarPedidos
+      tags: [Pedidos]
+      parameters:
+        - name: page
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+          description: Número da página (começa em 1)
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 50
+            default: 10
+          description: Itens por página (máximo 50)
+      responses:
+        "200":
+          description: Página de pedidos
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PedidoPaginado'
+        "503":
+          $ref: '#/components/responses/Indisponivel'
+    post:
+      summary: Cria um novo pedido
+      operationId: criarPedido
+      tags: [Pedidos]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PedidoEntrada'
+      responses:
+        "201":
+          description: Pedido criado
+          headers:
+            Location:
+              description: URL do pedido criado
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Pedido'
+        "400":
+          $ref: '#/components/responses/CorpoIlegivel'
+        "422":
+          $ref: '#/components/responses/EntradaInvalida'
+        "503":
+          $ref: '#/components/responses/Indisponivel'
+
+  /pedidos/{pedidoId}:
+    parameters:
+      - name: pedidoId
+        in: path
+        required: true
+        schema:
+          type: integer
+        description: Identificador do pedido
+    get:
+      summary: Busca um pedido pelo id
+      operationId: buscarPedido
+      tags: [Pedidos]
+      responses:
+        "200":
+          description: Pedido encontrado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Pedido'
+        "404":
+          $ref: '#/components/responses/NaoEncontrado'
+        "503":
+          $ref: '#/components/responses/Indisponivel'
+    put:
+      summary: Atualiza um pedido existente
+      operationId: atualizarPedido
+      tags: [Pedidos]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PedidoEntrada'
+      responses:
+        "200":
+          description: Pedido atualizado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Pedido'
+        "400":
+          $ref: '#/components/responses/CorpoIlegivel'
+        "404":
+          $ref: '#/components/responses/NaoEncontrado'
+        "422":
+          $ref: '#/components/responses/EntradaInvalida'
+        "503":
+          $ref: '#/components/responses/Indisponivel'
+    delete:
+      summary: Remove um pedido
+      operationId: removerPedido
+      tags: [Pedidos]
+      responses:
+        "204":
+          description: Pedido removido
+        "404":
+          $ref: '#/components/responses/NaoEncontrado'
+        "503":
+          $ref: '#/components/responses/Indisponivel'
+
+  /pedidos/{pedidoId}/cancelamento:
+    parameters:
+      - name: pedidoId
+        in: path
+        required: true
+        schema:
+          type: integer
+        description: Identificador do pedido
+    post:
+      summary: Cancela um pedido — capacidade que o código ainda não tem
+      operationId: cancelarPedido
+      tags: [Pedidos]
+      responses:
+        "200":
+          description: Pedido cancelado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Pedido'
+        "404":
+          $ref: '#/components/responses/NaoEncontrado'
+        "409":
+          description: O pedido não pode ser cancelado no estado atual
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              example:
+                type: /erros/pedido-nao-cancelavel
+                title: Pedido já entregue ou já cancelado
+                status: 409
+        "501":
+          $ref: '#/components/responses/NaoImplementado'
+        "503":
+          $ref: '#/components/responses/Indisponivel'
+
+components:
+  schemas:
+    Health:
+      type: object
+      properties:
+        status:
+          type: string
+          example: ok
+      required: [status]
+
+    PedidoEntrada:
+      type: object
+      properties:
+        cliente:
+          type: string
+          minLength: 1
+          maxLength: 120
+        produto:
+          type: string
+          minLength: 1
+          maxLength: 120
+        quantidade:
+          type: integer
+          minimum: 1
+        preco:
+          type: number
+          exclusiveMinimum: 0
+      required: [cliente, produto, quantidade, preco]
+
+    Pedido:
+      allOf:
+        - $ref: '#/components/schemas/PedidoEntrada'
+        - type: object
+          properties:
+            id:
+              type: integer
+            status:
+              type: string
+              enum: [pendente, confirmado, cancelado]
+              description: Capacidade nova — o código hoje não guarda estado do pedido
+          required: [id]
+
+    PedidoPaginado:
+      type: object
+      properties:
+        itens:
+          type: array
+          items:
+            $ref: '#/components/schemas/Pedido'
+        pagina:
+          type: integer
+        limite:
+          type: integer
+        total:
+          type: integer
+      required: [itens, pagina, limite, total]
+
+    Problem:
+      type: object
+      description: RFC 9457 — Problem Details for HTTP APIs
+      properties:
+        type:
+          type: string
+          format: uri
+        title:
+          type: string
+        status:
+          type: integer
+        detail:
+          type: string
+        instance:
+          type: string
+          format: uri
+      required: [type, title, status]
+
+  responses:
+    CorpoIlegivel:
+      description: O corpo da requisição não é um JSON válido
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+          example:
+            type: /erros/corpo-ilegivel
+            title: Corpo da requisição não é um JSON válido
+            status: 400
+    EntradaInvalida:
+      description: O corpo foi entendido, e recusado
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+          example:
+            type: /erros/entrada-invalida
+            title: Dados de entrada inválidos
+            status: 422
+    NaoEncontrado:
+      description: O recurso pedido não existe
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+          example:
+            type: /erros/nao-encontrado
+            title: Pedido não encontrado
+            status: 404
+    NaoImplementado:
+      description: Está no contrato, ainda não no código
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+          example:
+            type: /erros/nao-implementado
+            title: Funcionalidade ainda não implementada
+            status: 501
+    Indisponivel:
+      description: O serviço não consegue atender agora
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+          example:
+            type: /erros/indisponivel
+            title: Serviço indisponível
+            status: 503
